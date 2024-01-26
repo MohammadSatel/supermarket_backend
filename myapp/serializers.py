@@ -6,16 +6,15 @@ from django.contrib.auth.models import User
 
 
 # serializers for models
-
 class ProductSerializer(ModelSerializer):
     class Meta:
         model = Product
         fields = '__all__'
-        
+  
 class CategorySerializer(ModelSerializer):
     class Meta:
         model = Category
-        fields = '__all__'
+        fields = '__all__'  
         
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
@@ -45,9 +44,7 @@ class OrderSerializer(serializers.ModelSerializer):
             OrderDetail.objects.create(order=order, **order_detail_data)
 
         return order
-        
-        
-
+          
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
@@ -55,7 +52,6 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['username'] = user.username
         token['email'] = user.email
         return token
-
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:

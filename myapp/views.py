@@ -1,5 +1,3 @@
-from django.shortcuts import get_object_or_404
-from rest_framework.decorators import api_view, permission_classes
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -14,13 +12,13 @@ from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from django.shortcuts import get_object_or_404
 from django.core.mail import send_mail
-
+from django.shortcuts import get_object_or_404
+from rest_framework.decorators import api_view, permission_classes
 
 
 # Login - get token with payload from sirializer
 class MyTokenObtainPairView(TokenObtainPairView):
     serializer_class = MyTokenObtainPairSerializer
-
 
 @api_view(['POST', 'PUT'])
 def register_or_update_user(req):
@@ -54,14 +52,12 @@ def register_or_update_user(req):
 
         return Response({"user": "updated successfully"})
 
-
 # Register - get username & pass and create new user
 @api_view(['POST'])
 def register(req):
     User.objects.create_user(username=req.data["username"], password=req.data["password"], email=req.data["email"])
     return Response({"user":"created successfuly"})
  
-
 # @Route to upd user details
 @api_view(['PUT'])
 @permission_classes([IsAuthenticated])
@@ -79,7 +75,6 @@ def update_user_details(request):
         return Response(serializer.data, status=status.HTTP_200_OK)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
 # Helper function to send mail receipt
 def send_mail_receipt(user, user_cart, total_price):
     subject = f"Your Receipt, {user}"
@@ -94,11 +89,10 @@ def send_mail_receipt(user, user_cart, total_price):
     send_mail(
         subject,
         message,
-        "mosheshop.super@gmail.com",
+        "email@gmail.com",
         [user.email],
         fail_silently=False,
     )
-
 
 # get cart from user and save it to Order and OrderDetail
 @api_view(['POST'])
@@ -142,7 +136,6 @@ def checkOut(req):
 
     return Response("order saved fucking successfuly", status=status.HTTP_201_CREATED)
 
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_orders(request):
@@ -184,7 +177,6 @@ def get_orders(request):
 
     return Response(response_data)
 
-
 @api_view(['POST'])
 def forgot_password(request):
     email = request.data.get('email')
@@ -209,10 +201,8 @@ def forgot_password(request):
 
     return Response({"message": "Password reset email sent successfully"}, status=status.HTTP_200_OK)
 
-
 # Full CRUD using serializer for product & categoy models. 
 # not really needed for now because i'm using "/admin"
-
 class ProductsView(APIView):
     def get(self, request, catID=None):
         if catID is not None:
@@ -242,7 +232,6 @@ class ProductsView(APIView):
         product = Product.objects.get(id=id)
         product.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-
 
 class CategoriesView(APIView):
     def get(self, request):

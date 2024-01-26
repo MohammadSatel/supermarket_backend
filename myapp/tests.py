@@ -2,8 +2,9 @@ import json
 from django.test import RequestFactory, TestCase
 from django.test import Client
 from myapp.views import ProductsView
-# Create your tests here.
 
+
+# Tests
 class TestProductsView(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
