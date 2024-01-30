@@ -1,65 +1,60 @@
+from django.conf import settings
 from rest_framework import status
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from django.contrib.auth.models import User
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
-from .models import Category, Product, Order, OrderDetail
-from .serializers import CategorySerializer, MyTokenObtainPairSerializer, OrderSerializer, ProductSerializer, UserSerializer, OrderDetailSerializer
+from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
+from django.contrib.auth.models import User
+from django.contrib.auth.hashers import make_password
 from django.core.mail import send_mail
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from django.shortcuts import get_object_or_404
-from django.core.mail import send_mail
-from django.shortcuts import get_object_or_404
-from rest_framework.decorators import api_view, permission_classes
+from django.conf import settings
+
+from .models import Category, Product, Order, OrderDetail
+from .serializers import (
+    CategorySerializer,
+    MyTokenObtainPairSerializer,
+    OrderSerializer,
+    ProductSerializer,
+    UserSerializer,
+    OrderDetailSerializer,
+)
 
 
-# Login - get token with payload from sirializer
+# Login - get token with payload from serializer
 class MyTokenObtainPairView(TokenObtainPairView):
     serializer_class = MyTokenObtainPairSerializer
 
-@api_view(['POST', 'PUT'])
-def register_or_update_user(req):
-    if req.method == 'POST':
-        serializer = UserSerializer(data=req.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"message": "User created successfully"}, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    elif req.method == 'PUT':
-        username = req.data.get("username")
-        user = get_object_or_404(User, username=username)
-        serializer = UserSerializer(user, data=req.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"message": "User updated successfully"}, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-# Register - get username & pass and create new user
 @api_view(['POST'])
-def register(req):
-    User.objects.create_user(username=req.data["username"], password=req.data["password"], email=req.data["email"])
-    return Response({"user":"created successfuly"})
- 
-# @Route to upd user details
+def register(request):
+    # Explicitly hash the password before passing to the serializer
+    data = request.data.copy()
+    data['password'] = make_password(data['password'])
+    serializer = UserSerializer(data=data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response({"message": "User created successfully"}, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
 @api_view(['PUT'])
 @permission_classes([IsAuthenticated])
 def update_user_details(request):
-    print(request.data)
+    # Update user details, ensure that the user can only update their own details
     user = request.user
-    data = {
-        'username': request.data.get('username', user.username),
-        'password': request.data.get('password', user.password),
-        'email': request.data.get('email', user.email),
-    }
-    serializer = UserSerializer(user, data=data)
+    data = request.data.copy()
+    if 'password' in data:
+        data['password'] = make_password(data['password'])
+    serializer = UserSerializer(user, data=data, partial=True)
     if serializer.is_valid():
         serializer.save()
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response({"message": "User updated successfully"}, status=status.HTTP_200_OK)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 # Helper function to send mail receipt
 def send_mail_receipt(user, user_cart, total_price):
@@ -83,44 +78,34 @@ def send_mail_receipt(user, user_cart, total_price):
 # get cart from user and save it to Order and OrderDetail
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def checkOut(req):
-    user = req.user
+def checkOut(request):
+    user = request.user
 
     # Validate the cart data in the request
-    cart_data = req.data.get('cart')
-    if cart_data == []:
-        return Response("cant save empty cart")
-    if not isinstance(cart_data, list) or not all(isinstance(item, dict) and 'id' in item and 'amount' in item for item in cart_data):
-        return Response("Invalid cart data. Expect an array of items with 'id' and 'amount' fields.", status=status.HTTP_400_BAD_REQUEST)
+    cart_data = request.data.get('cart')
+    if not cart_data:
+        return Response({"message": "Cannot save an empty cart"}, status=status.HTTP_400_BAD_REQUEST)
 
     order = Order.objects.create(user=user, total_price=0)
-
     total_price = 0
     for item in cart_data:
-        product_id = item['id']
+        product = get_object_or_404(Product, id=item['id'])
         quantity = item['amount']
-
-        try:
-            product = Product.objects.get(id=product_id)
-        except Product.DoesNotExist:
-            return Response(f"Product with ID {product_id} does not exist.", status=status.HTTP_400_BAD_REQUEST)
-
         if quantity <= 0:
             return Response("Invalid quantity. Quantity must be greater than 0.", status=status.HTTP_400_BAD_REQUEST)
-
         OrderDetail.objects.create(order=order, product=product, quantity=quantity)
-
         total_price += product.price * quantity
 
     order.total_price = total_price
     order.save()
+
     # Call the helper function to send email
     try:
         send_mail_receipt(user, cart_data, total_price)
     except Exception as e:
         return Response({"error": f"An error occurred while sending the email: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    return Response("order saved fucking successfuly", status=status.HTTP_201_CREATED)
+    return Response({"message": "Order saved successfully"}, status=status.HTTP_201_CREATED)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -166,26 +151,15 @@ def get_orders(request):
 @api_view(['POST'])
 def forgot_password(request):
     email = request.data.get('email')
-
-    # Find the user with the provided email
     user = get_object_or_404(User, email=email)
-
-    # Generate a unique token for password reset
-    uidb64 = urlsafe_base64_encode(force_bytes(user.id))
+    uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
     token = default_token_generator.make_token(user)
-
-    # Create a password reset link with the token
-    # reset_url = f"{request.build_absolute_uri('/')[:-1]}/password-reset-confirm/{uidb64}/{token}/"
-
-    # Send an email to the user with the reset link
+    reset_url = f"{request.build_absolute_uri('/')[:-1]}/password-reset-confirm/{uidb64}/{token}/"
     subject = "Password Reset"
-    message = f"Click the following link to reset your password: Not implemented yet"# {reset_url}"
-    from_email = "noreply@example.com"  # Update with your email
-    to_email = [user.email]
-    
-    send_mail(subject, message, from_email, to_email, fail_silently=False)
-
+    message = f"Click the following link to reset your password: {reset_url}"
+    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email], fail_silently=False)
     return Response({"message": "Password reset email sent successfully"}, status=status.HTTP_200_OK)
+
 
 # Full CRUD using serializer for product & categoy models. 
 # not really needed for now because i'm using "/admin"
