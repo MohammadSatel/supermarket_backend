@@ -23,34 +23,20 @@ class MyTokenObtainPairView(TokenObtainPairView):
 @api_view(['POST', 'PUT'])
 def register_or_update_user(req):
     if req.method == 'POST':
-        # Create a new user
-        User.objects.create_user(
-            username=req.data["username"],
-            password=req.data["password"],
-            email=req.data["email"]
-        )
-        return Response({"user": "created successfully"}, status=status.HTTP_201_CREATED)
+        serializer = UserSerializer(data=req.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "User created successfully"}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     elif req.method == 'PUT':
-        # Update an existing user
         username = req.data.get("username")
-        password = req.data.get("password")
-        email = req.data.get("email")
+        user = get_object_or_404(User, username=username)
+        serializer = UserSerializer(user, data=req.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "User updated successfully"}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        # Assuming you identify the user by username, you can change it to the appropriate identifier
-        try:
-            user = User.objects.get(username=username)
-        except User.DoesNotExist:
-            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        # Update user fields
-        if password:
-            user.set_password(password)
-        if email:
-            user.email = email
-
-        user.save()
-
-        return Response({"user": "updated successfully"})
 
 # Register - get username & pass and create new user
 @api_view(['POST'])
